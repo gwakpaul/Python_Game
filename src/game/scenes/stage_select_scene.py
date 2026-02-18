@@ -34,6 +34,9 @@ class StageSelectScene(Scene):
 
         self.btn_home = Button(pygame.Rect(20, 20, 120, 40), "Home")
 
+        # 해골 아이콘(이번 패치: 항상 보이도록)
+        self.skull_rect = pygame.Rect(0, 0, 18, 18)
+
     def on_enter(self) -> None:
         self._build_grid()
 
@@ -107,6 +110,11 @@ class StageSelectScene(Scene):
 
             self.buttons.append((stage_number, stage_id, implemented, rect))
 
+        # 해골 아이콘 위치(홈 버튼 오른쪽, 아주 작게)
+        self.skull_rect.size = (18, 18)
+        self.skull_rect.left = self.btn_home.rect.right + 8
+        self.skull_rect.centery = self.btn_home.rect.centery
+
     def handle_event(self, event) -> None:
         if event.type == pygame.VIDEORESIZE:
             self._build_grid()
@@ -123,6 +131,12 @@ class StageSelectScene(Scene):
             if self.btn_home.rect.collidepoint(mx, my):
                 from .main_menu_scene import MainMenuScene
                 self.app.change_scene(MainMenuScene(self.app))
+                return
+
+            # 해골 아이콘 클릭(이번 패치: 미구현 토스트만)
+            # 원래 설계: 25스테이지까지 모두 클리어했을 때만 표시/활성화
+            if self.skull_rect.collidepoint(mx, my):
+                self.toast.show("미구현 스테이지.")
                 return
 
             for stage_number, stage_id, implemented, rect in self.buttons:
@@ -151,6 +165,11 @@ class StageSelectScene(Scene):
         )
 
         self.btn_home.render(screen, self.app.small_font, mouse)
+
+        # 해골 아이콘 렌더(아주 작게)
+        # - 폰트/환경에 따라 이모지가 네모로 뜰 수 있음(폰트가 이모지를 지원하지 않는 경우)
+        skull_surf = self.app.small_font.render("💀", True, (230, 230, 230))
+        screen.blit(skull_surf, skull_surf.get_rect(center=self.skull_rect.center))
 
         font = self.app.small_font
 

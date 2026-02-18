@@ -32,27 +32,48 @@ class App:
         self.base_font = pygame.font.SysFont("malgungothic", 30) or pygame.font.SysFont(None, 30)
         self.small_font = pygame.font.SysFont("malgungothic", 20) or pygame.font.SysFont(None, 20)
 
-        # 게임 내부 마스터 볼륨(0.0~1.0)
+        # 게임 내부 기본 볼륨(0.0~1.0): 기존 master_volume 역할(게임 내부 볼륨)
         self.master_volume = 0.5
-        self.apply_master_volume(self.master_volume)
 
-    def apply_master_volume(self, volume_01: float) -> None:
+        # 최종 출력 배율(0.0~1.0): 기기(OS) 볼륨에 더해 게임이 곱해주는 배율
+        # - OS 볼륨을 직접 제어하는 게 아니라, 게임 출력에 곱해지는 배율이다.
+        self.output_gain = 1.0
+
+        # 초기 반영
+        self.apply_master_volume(self.master_volume)
+        self.apply_output_gain(self.output_gain)
+
+    def _apply_final_volume(self) -> None:
         """
-        게임 내부 볼륨(0.0~1.0)을 pygame mixer에 적용.
-        - OS 볼륨과 독립적이며, 게임이 재생하는 사운드만 영향을 받음.
+        최종 mixer 볼륨을 반영.
+        final = clamp(master_volume * output_gain, 0..1)
         """
-        v = max(0.0, min(1.0, float(volume_01)))
-        self.master_volume = v
+        final_v = float(self.master_volume) * float(self.output_gain)
+        final_v = max(0.0, min(1.0, final_v))
 
         try:
-            # music은 전역 볼륨이 있음
-            pygame.mixer.music.set_volume(v)
+            pygame.mixer.music.set_volume(final_v)
         except Exception:
             pass
 
         # Sound 객체 개별 볼륨은 생성 시점에 설정하는 게 정석이라,
         # 추후 AudioManager를 두고 재생 시 곱해주는 방식으로 확장할 예정.
-        # (현재는 사운드 리소스가 없으므로 여기까지로 충분)
+
+    def apply_master_volume(self, volume_01: float) -> None:
+        """
+        게임 내부 기본 볼륨(0.0~1.0)을 설정하고, 최종 볼륨에 반영.
+        """
+        v = max(0.0, min(1.0, float(volume_01)))
+        self.master_volume = v
+        self._apply_final_volume()
+
+    def apply_output_gain(self, gain_01: float) -> None:
+        """
+        최종 출력 배율(0.0~1.0)을 설정하고, 최종 볼륨에 반영.
+        """
+        g = max(0.0, min(1.0, float(gain_01)))
+        self.output_gain = g
+        self._apply_final_volume()
 
     def change_scene(self, next_scene: Scene) -> None:
         if self.scene is not None:

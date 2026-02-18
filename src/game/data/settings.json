@@ -1,4 +1,5 @@
 {
-  "master_volume": 29,
-  "warning_shown": true
+  "master_volume": 70,
+  "warning_shown": true,
+  "output_gain": 100
 }

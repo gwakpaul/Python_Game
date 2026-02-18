@@ -38,28 +38,53 @@ def save_progress(progress: dict) -> None:
     _save_json(_PROGRESS_PATH, progress)
 
 
+def _clamp_int(x: int, lo: int, hi: int) -> int:
+    return lo if x < lo else hi if x > hi else x
+
+
 def load_settings() -> dict:
     """
-    master_volume: 0~100 (게임 내부 볼륨)
+    master_volume: 0~100 (게임 내부 기본 볼륨)
+    output_gain: 0~100 (최종 출력 배율)
     """
-    s = _load_json(_SETTINGS_PATH, {"master_volume": 50})
-    # 안전하게 클램프
+    s = _load_json(_SETTINGS_PATH, {"master_volume": 50, "output_gain": 100})
+
+    # master_volume clamp
     try:
         v = int(s.get("master_volume", 50))
     except Exception:
         v = 50
-    v = max(0, min(100, v))
+    v = _clamp_int(v, 0, 100)
     s["master_volume"] = v
+
+    # output_gain clamp
+    try:
+        g = int(s.get("output_gain", 100))
+    except Exception:
+        g = 100
+    g = _clamp_int(g, 0, 100)
+    s["output_gain"] = g
+
     return s
 
 
 def save_settings(settings: dict) -> None:
-    # 안전하게 클램프
+    settings = dict(settings)
+
+    # master_volume clamp
     try:
         v = int(settings.get("master_volume", 50))
     except Exception:
         v = 50
-    v = max(0, min(100, v))
-    settings = dict(settings)
+    v = _clamp_int(v, 0, 100)
     settings["master_volume"] = v
+
+    # output_gain clamp
+    try:
+        g = int(settings.get("output_gain", 100))
+    except Exception:
+        g = 100
+    g = _clamp_int(g, 0, 100)
+    settings["output_gain"] = g
+
     _save_json(_SETTINGS_PATH, settings)
