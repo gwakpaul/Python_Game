@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import pygame
+import random
 
 from ..core.stage_base import Stage
 from ..ui.slider_chrome import SliderChrome
@@ -77,8 +78,32 @@ class ScratchBarStage(Stage):
         self._cell_rows = max(1, h // self.cell_h)
         self._total_cells = self._cell_cols * self._cell_rows
 
+                # 옵션에서 선택한 볼륨(initial)을 반영해 시작값을 맞춘다.
         self._covered.clear()
-        self.current_value = 0
+
+        self.current_value = _clamp_int(int(getattr(self, "_initial_value", 0)), 0, 100)
+
+        # current_value에 맞춰 covered를 대략적으로 초기화(시각/판정 일관성)
+        # - total_cells 비율만큼 임의 셀을 covered로 채운다.
+        if self._total_cells > 0:
+            want = int(round(self._total_cells * (self.current_value / 100.0)))
+            want = _clamp_int(want, 0, self._total_cells)
+
+            if want > 0:
+                indices = list(range(self._total_cells))
+                random.shuffle(indices)
+                seed = indices[:want]
+                self._covered.update(seed)
+
+                # 시각적으로도 채워 보이게(셀 단위로 검정 채움)
+                if self.scratch_surf is not None:
+                    for idx in seed:
+                        cy = idx // self._cell_cols
+                        cx = idx % self._cell_cols
+                        x = cx * self.cell_w
+                        y = cy * self.cell_h
+                        pygame.draw.rect(self.scratch_surf, (0, 0, 0, 255), pygame.Rect(x, y, self.cell_w, self.cell_h))
+
         self._volume_changed = True
 
         self.dragging = False

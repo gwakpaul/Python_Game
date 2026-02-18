@@ -11,6 +11,7 @@ from ..stages.cannon_shot import CannonShotStage
 from ..stages.tilt_slider import TiltSliderStage
 from ..stages.scratch_bar import ScratchBarStage
 from ..stages.pong_bounce import PongBounceStage
+from ..stages.slide_random import SlideRandomStage, make_random_mapping_0_100
 
 from ..systems.persist import load_progress, save_progress, load_settings
 from ..systems.stage_catalog import StageCatalog
@@ -19,12 +20,28 @@ from ..ui.header import Header
 from ..ui.modal_dialog import ModalDialog
 
 
-def pick_target_avoiding_near(initial_value: int, min_distance: int) -> int:
-    lo = max(0, initial_value - min_distance)
-    hi = min(100, initial_value + min_distance)
-    candidates = [x for x in range(0, 101) if not (lo <= x <= hi)]
-    return random.choice(candidates) if candidates else random.randint(0, 100)
+def pick_target_within_range(initial_value: int, radius: int, min_distance: int = 0) -> int:
+    """
+    initial_value를 기준으로 [-radius, +radius] 범위 내에서 target을 선택.
+    min_distance > 0이면 initial 근처(+-min_distance)는 피한다.
+    """
+    iv = int(initial_value)
+    lo = max(0, iv - int(radius))
+    hi = min(100, iv + int(radius))
 
+    # 후보를 만들되, min_distance 구간은 제외
+    if min_distance > 0:
+        ban_lo = max(0, iv - int(min_distance))
+        ban_hi = min(100, iv + int(min_distance))
+        candidates = [x for x in range(lo, hi + 1) if not (ban_lo <= x <= ban_hi)]
+    else:
+        candidates = list(range(lo, hi + 1))
+
+    if candidates:
+        return random.choice(candidates)
+
+    # 후보가 비면 그냥 범위 내 랜덤
+    return random.randint(lo, hi)
 
 class StagePlayScene(Scene):
     def __init__(self, app, stage_number: int, stage_id: str, mode: str) -> None:
@@ -80,11 +97,34 @@ class StagePlayScene(Scene):
         bal = self.catalog.get_balance(self.stage_id)
         self.stage_time_limit = float(getattr(bal, "time_limit_seconds", 0.0))
 
-        # pong_bounce는 "튕김 횟수 목표"로 별도 생성
+        target = None
+        slide_mapping = None
+        slide_initial_pos = None
+
         if self.stage_id == "pong_bounce":
             target = random.randint(12, 28)
+
+        elif self.stage_id == "slide_random":
+            # 0~100 위치에 0~100 값이 랜덤 배정된 매핑 생성
+            slide_mapping = make_random_mapping_0_100()
+
+            # 초기 노브 위치(0~100 퍼센트)는 랜덤
+            slide_initial_pos = random.randint(0, 100)
+
+            # 목표값은 "매핑에 존재하는 값" 중 하나로 선택 (즉 mapping[?] 중 하나)
+            # 그리고 '현재값 +-30' 범위 내에서 우선적으로 선택해 난이도/일관성 확보
+            current_at_start = int(slide_mapping[slide_initial_pos])
+            lo = max(0, current_at_start - 30)
+            hi = min(100, current_at_start + 30)
+            candidates = [v for v in slide_mapping if lo <= v <= hi]
+            target = random.choice(candidates) if candidates else random.choice(slide_mapping)
+
         else:
-            target = pick_target_avoiding_near(initial_value, int(getattr(bal, "min_target_distance", 0)))
+            target = pick_target_within_range(
+                initial_value=initial_value,
+                radius=30,
+                min_distance=int(getattr(bal, "min_target_distance", 0)),
+            )
 
         if self.stage_id == "slider_normal":
             self.stage = SliderNormalStage(
@@ -131,6 +171,20 @@ class StagePlayScene(Scene):
                 target=target,
                 play_rect=self.play_rect,
                 initial_value=initial_value,
+                hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
+                clear_mode=str(getattr(bal, "clear_mode", "hold")),
+            )
+        elif self.stage_id == "slide_random":
+            if slide_mapping is None:
+                slide_mapping = make_random_mapping_0_100()
+            if slide_initial_pos is None:
+                slide_initial_pos = random.randint(0, 100)
+
+            self.stage = SlideRandomStage(
+                target=int(target),
+                play_rect=self.play_rect,
+                mapping=slide_mapping,
+                initial_position_percent=int(slide_initial_pos),
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )

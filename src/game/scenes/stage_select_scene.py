@@ -36,6 +36,12 @@ class StageSelectScene(Scene):
 
         # 해골 아이콘(이번 패치: 항상 보이도록)
         self.skull_rect = pygame.Rect(0, 0, 18, 18)
+        
+        # 아이콘은 이모지 렌더 대신, 임시로 흰 정사각형 이미지(Surface)로 표시한다.
+        # 나중에 원하는 PNG로 바꿀 때는 pygame.image.load(...)로 교체하면 된다.
+        self.skull_image = pygame.Surface((18, 18), pygame.SRCALPHA)
+        self.skull_image.fill((255, 255, 255, 255))
+
 
     def on_enter(self) -> None:
         self._build_grid()
@@ -166,10 +172,8 @@ class StageSelectScene(Scene):
 
         self.btn_home.render(screen, self.app.small_font, mouse)
 
-        # 해골 아이콘 렌더(아주 작게)
-        # - 폰트/환경에 따라 이모지가 네모로 뜰 수 있음(폰트가 이모지를 지원하지 않는 경우)
-        skull_surf = self.app.small_font.render("💀", True, (230, 230, 230))
-        screen.blit(skull_surf, skull_surf.get_rect(center=self.skull_rect.center))
+        screen.blit(self.skull_image, self.skull_rect.topleft)
+
 
         font = self.app.small_font
 

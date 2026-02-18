@@ -6,7 +6,7 @@
     { "id": "tilt_slider", "display_name": "Tilt Slider", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": true, "time_limit_seconds": 30 },
     { "id": "scratch_bar", "display_name": "Scratch Bar", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": true, "time_limit_seconds": 30 },
     { "id": "pong_bounce", "display_name": "Pong Bounce", "min_target_distance": 10, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": true, "time_limit_seconds": 0 },
-    { "id": "tbd_07", "display_name": "TBD", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": false, "time_limit_seconds": 30 },
+    { "id": "slide_random", "display_name": "Slide Random", "min_target_distance": 0, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": true, "time_limit_seconds": 30 },
     { "id": "tbd_08", "display_name": "TBD", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": false, "time_limit_seconds": 30 },
     { "id": "tbd_09", "display_name": "TBD", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": false, "time_limit_seconds": 30 },
     { "id": "tbd_10", "display_name": "TBD", "min_target_distance": 30, "hold_seconds": 0.5, "clear_mode": "hold", "implemented": false, "time_limit_seconds": 30 },
