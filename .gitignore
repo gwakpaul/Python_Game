@@ -1,0 +1,22 @@
+﻿.venv/
+__pycache__/
+*.pyc
+.DS_Store
+.vscode/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Python packaging / build
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# Pytest / coverage (나중에 쓸 수도 있어서)
+.pytest_cache/
+.coverage
+htmlcov/

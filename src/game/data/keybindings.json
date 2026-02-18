@@ -1,0 +1,6 @@
+﻿{
+  "bindings": {
+    "pause": "ESC",
+    "confirm": "ENTER"
+  }
+}

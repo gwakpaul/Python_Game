@@ -1,0 +1,13 @@
+﻿{
+  "mode": "run10",
+  "stage_count": 10,
+  "pool": [
+    { "id": "slider_normal", "weight": 1 }
+  ],
+  "rules": {
+    "no_consecutive_same": false,
+    "max_occurrence_per_run": {
+      "slider_normal": 10
+    }
+  }
+}
