@@ -12,6 +12,7 @@ from ..stages.tilt_slider import TiltSliderStage
 from ..stages.scratch_bar import ScratchBarStage
 from ..stages.pong_bounce import PongBounceStage
 from ..stages.slide_random import SlideRandomStage, make_random_mapping_0_100
+from ..stages.lever_crank import LeverCrankStage  # (추가) 8스테이지
 
 from ..systems.persist import load_progress, save_progress, load_settings
 from ..systems.stage_catalog import StageCatalog
@@ -29,7 +30,6 @@ def pick_target_within_range(initial_value: int, radius: int, min_distance: int 
     lo = max(0, iv - int(radius))
     hi = min(100, iv + int(radius))
 
-    # 후보를 만들되, min_distance 구간은 제외
     if min_distance > 0:
         ban_lo = max(0, iv - int(min_distance))
         ban_hi = min(100, iv + int(min_distance))
@@ -40,8 +40,78 @@ def pick_target_within_range(initial_value: int, radius: int, min_distance: int 
     if candidates:
         return random.choice(candidates)
 
-    # 후보가 비면 그냥 범위 내 랜덤
     return random.randint(lo, hi)
+
+
+def _draw_speaker_icon(screen: pygame.Surface, center: tuple[int, int], scale: float = 1.0) -> None:
+    cx, cy = center
+    s = float(scale)
+
+    fg = (235, 235, 235)
+
+    body_w = int(9 * s)
+    body_h = int(10 * s)
+    body = pygame.Rect(cx - int(12 * s), cy - body_h // 2, body_w, body_h)
+    pygame.draw.rect(screen, fg, body, border_radius=max(1, int(2 * s)))
+
+    top = (body.right, body.top + int(1 * s))
+    bot = (body.right, body.bottom - int(1 * s))
+    out_top = (body.right + int(8 * s), cy - int(5 * s))
+    out_bot = (body.right + int(8 * s), cy + int(5 * s))
+    pygame.draw.polygon(screen, fg, [top, out_top, out_bot, bot])
+
+    for r in [int(8 * s), int(12 * s)]:
+        rect = pygame.Rect(cx + int(2 * s), cy - r, r * 2, r * 2)
+        pygame.draw.arc(screen, fg, rect, -0.65, 0.65, width=max(1, int(2 * s)))
+
+
+def _draw_vertical_volume_meter(
+    screen: pygame.Surface,
+    rect: pygame.Rect,
+    value_0_100: int | None,
+    font: pygame.font.Font,
+) -> None:
+    x, y, w, h = rect.x, rect.y, rect.w, rect.h
+
+    num_h = 26
+    speaker_h = 22
+    gap = 6
+    bar_h = h - num_h - speaker_h - gap * 2
+    if bar_h < 10:
+        bar_h = 10
+
+    num_rect = pygame.Rect(x, y, w, num_h)
+    bar_rect = pygame.Rect(x + w // 2 - 8, y + num_h + gap, 16, bar_h)
+    speaker_center = (x + w // 2, y + num_h + gap + bar_h + gap + speaker_h // 2)
+
+    pygame.draw.rect(screen, (120, 120, 120), num_rect, border_radius=4)
+    pygame.draw.rect(screen, (60, 60, 70), num_rect, width=2, border_radius=4)
+
+    if value_0_100 is None:
+        txt = "N/A"
+    else:
+        v = max(0, min(100, int(value_0_100)))
+        txt = str(v)
+
+    base_surf = font.render(txt, True, (245, 245, 245))
+    scale = 0.82
+    tw = max(1, int(base_surf.get_width() * scale))
+    th = max(1, int(base_surf.get_height() * scale))
+    surf = pygame.transform.smoothscale(base_surf, (tw, th))
+    screen.blit(surf, surf.get_rect(center=num_rect.center))
+
+    pygame.draw.rect(screen, (160, 160, 160), bar_rect, border_radius=3)
+    pygame.draw.rect(screen, (90, 90, 105), bar_rect, width=2, border_radius=3)
+
+    if value_0_100 is not None:
+        v = max(0, min(100, int(value_0_100)))
+        fill_h = int(round((v / 100.0) * bar_rect.height))
+        fill = pygame.Rect(bar_rect.left + 2, bar_rect.bottom - fill_h + 2, bar_rect.width - 4, fill_h - 4)
+        if fill.height > 0:
+            pygame.draw.rect(screen, (30, 200, 60), fill, border_radius=2)
+
+    _draw_speaker_icon(screen, speaker_center, scale=0.95)
+
 
 class StagePlayScene(Scene):
     def __init__(self, app, stage_number: int, stage_id: str, mode: str) -> None:
@@ -61,18 +131,15 @@ class StagePlayScene(Scene):
         self.elapsed = 0.0
         self.fail_count = 0
 
-        # 중앙 플레이 프레임
         self.play_rect = pygame.Rect(0, 0, 860, 440)
 
         self.stage = None
         self._cleared_once = False
 
-        # 모달(성공/실패 공용)
         self._modal: ModalDialog | None = None
         self._modal_left_action = None
         self._modal_right_action = None
 
-        # 스테이지별 제한시간(0이면 제한 없음)
         self.stage_time_limit = 0.0
 
     def on_enter(self) -> None:
@@ -105,14 +172,9 @@ class StagePlayScene(Scene):
             target = random.randint(12, 28)
 
         elif self.stage_id == "slide_random":
-            # 0~100 위치에 0~100 값이 랜덤 배정된 매핑 생성
             slide_mapping = make_random_mapping_0_100()
-
-            # 초기 노브 위치(0~100 퍼센트)는 랜덤
             slide_initial_pos = random.randint(0, 100)
 
-            # 목표값은 "매핑에 존재하는 값" 중 하나로 선택 (즉 mapping[?] 중 하나)
-            # 그리고 '현재값 +-30' 범위 내에서 우선적으로 선택해 난이도/일관성 확보
             current_at_start = int(slide_mapping[slide_initial_pos])
             lo = max(0, current_at_start - 30)
             hi = min(100, current_at_start + 30)
@@ -134,6 +196,7 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
         elif self.stage_id == "toggle_grid":
             self.stage = ToggleGridStage(
                 target=target,
@@ -142,6 +205,7 @@ class StagePlayScene(Scene):
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
                 initial_value=initial_value,
             )
+
         elif self.stage_id == "cannon_shot":
             self.stage = CannonShotStage(
                 target=target,
@@ -150,6 +214,7 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
         elif self.stage_id == "tilt_slider":
             self.stage = TiltSliderStage(
                 target=target,
@@ -158,6 +223,7 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
         elif self.stage_id == "scratch_bar":
             self.stage = ScratchBarStage(
                 target=target,
@@ -166,6 +232,7 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
         elif self.stage_id == "pong_bounce":
             self.stage = PongBounceStage(
                 target=target,
@@ -174,6 +241,7 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
         elif self.stage_id == "slide_random":
             if slide_mapping is None:
                 slide_mapping = make_random_mapping_0_100()
@@ -188,8 +256,18 @@ class StagePlayScene(Scene):
                 hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
                 clear_mode=str(getattr(bal, "clear_mode", "hold")),
             )
+
+        elif self.stage_id == "lever_crank":
+            # (추가) 8스테이지 실제 레버 스테이지 생성
+            self.stage = LeverCrankStage(
+                target=int(target),
+                play_rect=self.play_rect,
+                initial_value=initial_value,
+                hold_seconds=float(getattr(bal, "hold_seconds", 0.5)),
+                clear_mode=str(getattr(bal, "clear_mode", "hold")),
+            )
+
         else:
-            # 알 수 없는 스테이지는 안전하게 기본 슬라이더로 폴백
             self.stage = SliderNormalStage(
                 target=target,
                 play_rect=self.play_rect,
@@ -201,12 +279,10 @@ class StagePlayScene(Scene):
         self.elapsed = 0.0
         self._cleared_once = False
 
-        # 모달 닫기
         self._modal = None
         self._modal_left_action = None
         self._modal_right_action = None
 
-        # BGM(또는 마스터 볼륨) 반영: 숫자 값 지원 스테이지만
         if self.stage is not None and self.stage.supports_numeric_value():
             cv = self.stage.get_current_value()
             if 0 <= cv <= 100:
@@ -290,21 +366,16 @@ class StagePlayScene(Scene):
 
     def _on_timeout(self) -> None:
         self.fail_count += 1
-
         if self.mode == "stage":
             self._open_fail_modal_stage_mode_timeover()
             return
-
-        # challenge에서는 즉시 재시작(모달 없음)
         self._create_stage()
 
     def _on_missed(self) -> None:
         self.fail_count += 1
-
         if self.mode == "stage":
             self._open_fail_modal_stage_mode_missed()
             return
-
         self._create_stage()
 
     def handle_event(self, event) -> None:
@@ -343,7 +414,6 @@ class StagePlayScene(Scene):
         if self.stage:
             self.stage.handle_event(event)
 
-            # 값 변경(= 볼륨/점수 등) 반영
             if hasattr(self.stage, "consume_volume_changed"):
                 try:
                     changed = bool(self.stage.consume_volume_changed())
@@ -361,11 +431,9 @@ class StagePlayScene(Scene):
 
         self.elapsed += dt
 
-        # 스테이지 update
         if self.stage:
             self.stage.update(dt)
 
-            # (pong) 미스 실패 처리
             if hasattr(self.stage, "consume_missed"):
                 try:
                     missed = bool(self.stage.consume_missed())
@@ -375,14 +443,12 @@ class StagePlayScene(Scene):
                     self._on_missed()
                     return
 
-        # 제한시간 처리(0이면 제한 없음)
         if self.stage_time_limit > 0:
             remaining = self.stage_time_limit - self.elapsed
             if remaining <= 0:
                 self._on_timeout()
                 return
 
-        # 클리어 처리
         if self.stage:
             if (not self._cleared_once) and self.stage.is_cleared():
                 self._cleared_once = True
@@ -409,7 +475,6 @@ class StagePlayScene(Scene):
         self.btn_stage.render(screen, self.app.small_font, mouse)
         self.btn_restart.render(screen, self.app.small_font, mouse)
 
-        # 우상단 정보: 제한시간이면 남은 시간, 아니면 경과 시간
         if self.stage_time_limit > 0:
             t = max(0.0, self.stage_time_limit - self.elapsed)
         else:
@@ -419,23 +484,30 @@ class StagePlayScene(Scene):
         surf = self.app.small_font.render(info, True, (230, 230, 230))
         screen.blit(surf, (screen.get_width() - surf.get_width() - 20, 25))
 
-        # 플레이 프레임
         pygame.draw.rect(screen, (0, 0, 0), self.play_rect)
         pygame.draw.rect(screen, (90, 90, 100), self.play_rect, 2)
 
         if self.stage:
             target_text = f"Target : {self.stage.get_target_value()}"
+            t1 = self.app.small_font.render(target_text, True, (230, 230, 230))
+            screen.blit(t1, (self.play_rect.left + 20, self.play_rect.top + 20))
 
             if self.stage.supports_numeric_value():
-                current_text = f"Current : {self.stage.get_current_value()}"
+                current_value = int(self.stage.get_current_value())
             else:
-                current_text = "Current : N/A"
+                current_value = None
 
-            t1 = self.app.small_font.render(target_text, True, (230, 230, 230))
-            t2 = self.app.small_font.render(current_text, True, (200, 200, 200))
-
-            screen.blit(t1, (self.play_rect.left + 20, self.play_rect.top + 20))
-            screen.blit(t2, (self.play_rect.right - t2.get_width() - 20, self.play_rect.top + 20))
+            meter_w = 44
+            meter_h = 190
+            pad_right = 20
+            pad_top = 12
+            meter_rect = pygame.Rect(
+                self.play_rect.right - pad_right - meter_w,
+                self.play_rect.top + pad_top,
+                meter_w,
+                meter_h,
+            )
+            _draw_vertical_volume_meter(screen, meter_rect, current_value, self.app.small_font)
 
             prev_clip = screen.get_clip()
             screen.set_clip(self.play_rect)
