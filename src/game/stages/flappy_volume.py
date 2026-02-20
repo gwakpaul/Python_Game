@@ -405,15 +405,30 @@ class FlappyVolumeStage(Stage):
             self.bird_r * 2,
         )
 
-    def _die_and_finalize(self) -> None:
+    def _die_and_finalize(self, force_fail: bool = False) -> None:
+        """
+        요구 조건:
+        - 목표가 N이면 N 기둥을 넘고, N+1 기둥을 넘기 전에 죽으면 클리어.
+        구현:
+        - 죽는 순간 current_value == target 이면 cleared
+        - cleared인 경우 missed를 올리지 않는다(StagePlayScene이 실패 처리로 먼저 빠지는 것 방지)
+        - current_value가 target을 넘어서는 순간(=N+1 통과)은 즉시 fail 처리
+        """
+        if force_fail:
+            self._cleared = False
+            self._missed = True
+            return
+
         if int(self.current_value) == int(self.get_target_value()):
             self._cleared = True
+            self._missed = False
         else:
             self._cleared = False
-        self._missed = True
+            self._missed = True
 
     def update(self, dt: float) -> None:
-        if self._cleared:
+        # 클리어/실패 처리 후에는 더 업데이트하지 않는다.
+        if self._cleared or self._missed:
             return
 
         if self._wait_t > 0.0:
@@ -467,9 +482,16 @@ class FlappyVolumeStage(Stage):
 
             if (not p.passed) and (self.bird_pos.x > p.center_x()):
                 p.passed = True
+
+                # 통과하면 current_value가 1 증가
                 if self.current_value < 100:
                     self.current_value += 1
                     self._value_changed = True
+
+                # 목표를 넘어섰다면(= N+1을 넘어버림) 즉시 실패 처리
+                if int(self.current_value) > int(self.get_target_value()):
+                    self._die_and_finalize(force_fail=True)
+                    return
 
     # ---- rendering helpers ----
     def _draw_pipe(self, screen: pygame.Surface, rect: pygame.Rect, cap_side: str) -> None:
