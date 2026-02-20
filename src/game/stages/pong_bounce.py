@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import random
+import math
 import pygame
 
 from ..core.stage_base import Stage
 
 
 def _clamp(x: float, lo: float, hi: float) -> float:
-    return lo if x < lo else hi if x > hi else hi
+    return lo if x < lo else hi if x > hi else x
 
 
 def _clamp_int(x: int, lo: int, hi: int) -> int:
@@ -26,12 +27,13 @@ class PongBounceStage(Stage):
         clear_mode: str = "hold",
         speed_scale: float = 0.70,
         start_delay_seconds: float = 1.0,
+        paddle_follow_rate: float = 22.0,  # ³ôÀ»¼ö·Ï ´õ Áï°¢ÀûÀ¸·Î µû¶ó°¨
     ) -> None:
         super().__init__(target, hold_seconds=hold_seconds, clear_mode=clear_mode)
 
         self.play_rect = play_rect.copy()
 
-        # ---- ì´ ìŠ¤í…Œì´ì§€ì—ì„œ "Current"ëŠ” 'í˜„ìž¬ ë³¼ë¥¨ ê°’'ìœ¼ë¡œ ì·¨ê¸‰ ----
+        # Current = ÇöÀç º¼·ý °ª(0~100)
         self.current_value = _clamp_int(int(initial_value), 0, 100)
         self._value_changed = True
 
@@ -46,7 +48,11 @@ class PongBounceStage(Stage):
         base_speed = 520.0
         self.ball_speed = base_speed * float(speed_scale)
 
-        self.paddle_y = 0.0
+        # paddle smoothing
+        self.paddle_follow_rate = float(max(1.0, paddle_follow_rate))
+        self.paddle_y = 0.0          # ½ÇÁ¦ ÆÐµé À§Ä¡(float)
+        self.paddle_target_y = 0.0   # ¸ñÇ¥ À§Ä¡(float)
+
         self.left_paddle = pygame.Rect(0, 0, self.paddle_w, self.paddle_h)
         self.right_paddle = pygame.Rect(0, 0, self.paddle_w, self.paddle_h)
 
@@ -83,7 +89,9 @@ class PongBounceStage(Stage):
         self.left_paddle.left = self.game_rect.left + pad_x
         self.right_paddle.right = self.game_rect.right - pad_x
 
+        # ÃÊ±â À§Ä¡
         self.paddle_y = float(self.game_rect.centery)
+        self.paddle_target_y = float(self.game_rect.centery)
         self.left_paddle.centery = int(self.paddle_y)
         self.right_paddle.centery = int(self.paddle_y)
 
@@ -115,9 +123,6 @@ class PongBounceStage(Stage):
             return True
         return False
 
-    def get_audio_volume_ratio(self) -> float:
-        return max(0.0, min(1.0, float(self.current_value) / 100.0))
-
     def consume_missed(self) -> bool:
         if self._missed:
             self._missed = False
@@ -137,14 +142,22 @@ class PongBounceStage(Stage):
     def handle_event(self, event: pygame.event.Event) -> None:
         return
 
+    def _update_paddle(self, dt: float) -> None:
+        # ¸¶¿ì½º Y¸¦ ¸Å ÇÁ·¹ÀÓ ÀÐ¾î¼­ ¸ñÇ¥·Î ¼³Á¤ (game_rect ¹ÛÀÌ¾îµµ clamp·Î Ã³¸®)
+        _mx, my = pygame.mouse.get_pos()
+        self.paddle_target_y = self._paddle_clamp_y(float(my))
+
+        # Áö¼ö ½º¹«µù: k = 1 - exp(-rate * dt)
+        k = 1.0 - math.exp(-self.paddle_follow_rate * float(dt))
+        self.paddle_y = self.paddle_y + (self.paddle_target_y - self.paddle_y) * k
+
+        self.left_paddle.centery = int(self.paddle_y)
+        self.right_paddle.centery = int(self.paddle_y)
+
     def update(self, dt: float) -> None:
         super().update(dt)
 
-        mx, my = pygame.mouse.get_pos()
-        if self.game_rect.collidepoint(mx, my):
-            self.paddle_y = self._paddle_clamp_y(float(my))
-            self.left_paddle.centery = int(self.paddle_y)
-            self.right_paddle.centery = int(self.paddle_y)
+        self._update_paddle(dt)
 
         if self._wait_t > 0.0:
             self._wait_t -= dt

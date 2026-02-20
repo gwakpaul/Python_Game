@@ -4,66 +4,79 @@ import json
 from pathlib import Path
 
 
-_DATA_DIR = Path(__file__).resolve().parents[1] / "data"
-_PROGRESS_PATH = _DATA_DIR / "progress.json"
-_SETTINGS_PATH = _DATA_DIR / "settings.json"
+# src/game/systems/persist.py
+# repo_root = parents[3] = <repo>
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+
+# ±âº»°ª ÅÛÇÃ¸´Àº src/game/data ¿¡ µÐ´Ù (·¹Æ÷¿¡ Æ÷ÇÔµÇ´Â ±âº» °ª)
+_DEFAULT_DATA_DIR = Path(__file__).resolve().parents[1] / "data"  # <repo>/src/game/data
+_DEFAULT_PROGRESS_PATH = _DEFAULT_DATA_DIR / "progress.json"
+_DEFAULT_SETTINGS_PATH = _DEFAULT_DATA_DIR / "settings.json"
+
+# ½ÇÁ¦ À¯Àú ÀúÀåÀº <repo>/save ·Î ºÐ¸®ÇÑ´Ù (·¹Æ÷¿¡ Ä¿¹Ô ´ë»óÀÌ ¾Æ´Ô)
+_SAVE_DIR = _REPO_ROOT / "save"
+_SAVE_PROGRESS_PATH = _SAVE_DIR / "progress.json"
+_SAVE_SETTINGS_PATH = _SAVE_DIR / "settings.json"
 
 
-def _ensure_data_dir() -> None:
-    _DATA_DIR.mkdir(parents=True, exist_ok=True)
+def _ensure_save_dir() -> None:
+    _SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _load_json(path: Path, default: dict) -> dict:
-    _ensure_data_dir()
+def _read_json(path: Path) -> dict | None:
     if not path.exists():
-        return dict(default)
+        return None
     try:
-        # Windowsì—ì„œ BOMì´ ë¶™ëŠ” ê²½ìš°ê°€ ìžˆì–´ utf-8-sig ì‚¬ìš©
         return json.loads(path.read_text(encoding="utf-8-sig"))
     except Exception:
-        # ê¹¨ì¡Œì„ ë•Œ ê¸°ë³¸ê°’ìœ¼ë¡œ ë³µêµ¬(í¬ëž˜ì‹œ ë°©ì§€)
-        return dict(default)
+        return None
+
+
+def _load_json_chain(paths: list[Path], default: dict) -> dict:
+    for p in paths:
+        data = _read_json(p)
+        if isinstance(data, dict):
+            return data
+    return dict(default)
 
 
 def _save_json(path: Path, data: dict) -> None:
-    _ensure_data_dir()
+    _ensure_save_dir()
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-
-
-def load_progress() -> dict:
-    return _load_json(_PROGRESS_PATH, {"highest_unlocked": 1})
-
-
-def save_progress(progress: dict) -> None:
-    _save_json(_PROGRESS_PATH, progress)
 
 
 def _clamp_int(x: int, lo: int, hi: int) -> int:
     return lo if x < lo else hi if x > hi else x
 
 
-def load_settings() -> dict:
-    """
-    master_volume: 0~100 (ê²Œìž„ ë‚´ë¶€ ê¸°ë³¸ ë³¼ë¥¨)
-    output_gain: 0~100 (ìµœì¢… ì¶œë ¥ ë°°ìœ¨)
-    """
-    s = _load_json(_SETTINGS_PATH, {"master_volume": 50, "output_gain": 100})
+def load_progress() -> dict:
+    return _load_json_chain(
+        paths=[_SAVE_PROGRESS_PATH, _DEFAULT_PROGRESS_PATH],
+        default={"highest_unlocked": 1},
+    )
 
-    # master_volume clamp
+
+def save_progress(progress: dict) -> None:
+    _save_json(_SAVE_PROGRESS_PATH, dict(progress))
+
+
+def load_settings() -> dict:
+    s = _load_json_chain(
+        paths=[_SAVE_SETTINGS_PATH, _DEFAULT_SETTINGS_PATH],
+        default={"master_volume": 50, "output_gain": 100},
+    )
+
     try:
         v = int(s.get("master_volume", 50))
     except Exception:
         v = 50
-    v = _clamp_int(v, 0, 100)
-    s["master_volume"] = v
+    s["master_volume"] = _clamp_int(v, 0, 100)
 
-    # output_gain clamp
     try:
         g = int(s.get("output_gain", 100))
     except Exception:
         g = 100
-    g = _clamp_int(g, 0, 100)
-    s["output_gain"] = g
+    s["output_gain"] = _clamp_int(g, 0, 100)
 
     return s
 
@@ -71,20 +84,16 @@ def load_settings() -> dict:
 def save_settings(settings: dict) -> None:
     settings = dict(settings)
 
-    # master_volume clamp
     try:
         v = int(settings.get("master_volume", 50))
     except Exception:
         v = 50
-    v = _clamp_int(v, 0, 100)
-    settings["master_volume"] = v
+    settings["master_volume"] = _clamp_int(v, 0, 100)
 
-    # output_gain clamp
     try:
         g = int(settings.get("output_gain", 100))
     except Exception:
         g = 100
-    g = _clamp_int(g, 0, 100)
-    settings["output_gain"] = g
+    settings["output_gain"] = _clamp_int(g, 0, 100)
 
-    _save_json(_SETTINGS_PATH, settings)
+    _save_json(_SAVE_SETTINGS_PATH, settings)
